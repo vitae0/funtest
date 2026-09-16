@@ -31,7 +31,17 @@
     const strip=W/RAYS;depthBuffer=new Array(RAYS).fill(MAX);ctx.fillStyle='#070b13';ctx.fillRect(0,0,W,H/2);ctx.fillStyle='#101722';ctx.fillRect(0,H/2,W,H/2);
     for(let i=0;i<RAYS;i++){const ray=p.a-FOV/2+(i/(RAYS-1))*FOV,rx=Math.cos(ray),ry=Math.sin(ray);let d=0,side=0;while(d<MAX){d+=.025;const x=p.x+rx*d,y=p.y+ry*d;if(solid(x,y)){const fx=x-Math.floor(x),fy=y-Math.floor(y);side=Math.min(fx,1-fx)<Math.min(fy,1-fy)?0:1;break}}const corr=d*Math.cos(ray-p.a);depthBuffer[i]=corr;const wh=Math.min(H*1.7,H/corr),y=(H-wh)/2;ctx.fillStyle=wallColor(side,corr);ctx.fillRect(i*strip,y,strip+1,wh);if(corr<5){ctx.fillStyle=`rgba(30,180,255,${(5-corr)*.025})`;ctx.fillRect(i*strip,y,strip+1,wh)}}
   }
-  function project(o){const dx=o.x-p.x,dy=o.y-p.y,ca=Math.cos(-p.a),sa=Math.sin(-p.a);const sx=dx*ca-dy*sa,sy=dx*sa+dy*ca;if(sx<=.05)return null;const ang=Math.atan2(sy,sx);if(Math.abs(ang)>FOV*.72)return null;const z=sx*Math.cos(ang),screenX=Math.floor((ang/FOV+.5)*RAYS);return{x:W/2+(ang/FOV)*W,y:H/2,size:Math.min(H*1.2,H/z)*o.size,dist:z,ray:screenX}}
+  function project(o){const dx=o.x-p.x,dy=o.y-p.y,ca=Math.cos(-p.a),sa=Math.sin(-p.a);const sx=dx*ca-dy*sa,sy=dx*sa+dy*ca;if(sx<=.05)return null;const ang=Math.atan2(sy,sx);if(Math.abs(ang)>FOV*.72)return null;const z=sx,screenX=Math.floor((ang/FOV+.5)*RAYS);return{x:W/2+(ang/FOV)*W,y:H/2,size:Math.min(H*1.2,H/z)*o.size,dist:z,ray:screenX}}
+  function clipSpriteToDepth(q,halfWidth=q.size){
+    const strip=W/RAYS,left=Math.max(0,q.x-halfWidth),right=Math.min(W,q.x+halfWidth);
+    const first=Math.max(0,Math.floor(left/strip)),last=Math.min(RAYS-1,Math.ceil(right/strip));
+    ctx.beginPath();let visible=false;
+    for(let r=first;r<=last;r++){
+      if(q.dist<=depthBuffer[r]+.06){ctx.rect(r*strip,0,strip+1,H);visible=true}
+    }
+    if(visible)ctx.clip();
+    return visible;
+  }
   function drawGoblin(e,q){
     const s=q.size,phase=e.attack>0?Math.sin((.22-e.attack)*28)*.32:Math.sin(performance.now()/260+e.phase)*.035;
     ctx.save();ctx.translate(q.x,H/2);ctx.globalAlpha=Math.max(.25,1-q.dist/20);ctx.shadowBlur=14;ctx.shadowColor=e.color;
@@ -50,14 +60,24 @@
     if(e.attack>0){ctx.strokeStyle='rgba(255,225,120,.8)';ctx.lineWidth=Math.max(2,s*.035);ctx.beginPath();ctx.arc(s*.2,0,s*.7,-1.2+.5*phase,1.1+.5*phase);ctx.stroke()}
     ctx.restore();
   }
-  function drawEnemies(){const list=enemies.map(e=>({e,q:project(e)})).filter(o=>o.q).sort((a,b)=>b.q.dist-a.q.dist);for(const o of list){const {e,q}=o;if(q.ray<0||q.ray>=RAYS||q.dist>depthBuffer[q.ray]+.18)continue;drawGoblin(e,q);const bw=q.size*1.4;ctx.fillStyle='#000b';ctx.fillRect(q.x-bw/2,H/2-q.size*.95,bw,4);ctx.fillStyle=e.color;ctx.fillRect(q.x-bw/2,H/2-q.size*.95,bw*Math.max(0,e.hp/e.maxHp),4)}}
+  function drawEnemies(){
+    const list=enemies.map(e=>({e,q:project(e)})).filter(o=>o.q).sort((a,b)=>b.q.dist-a.q.dist);
+    for(const {e,q} of list){
+      if(q.ray<0||q.ray>=RAYS)continue;
+      ctx.save();
+      if(!clipSpriteToDepth(q,q.size*.95)){ctx.restore();continue}
+      drawGoblin(e,q);
+      const bw=q.size*1.4;ctx.fillStyle='#000b';ctx.fillRect(q.x-bw/2,H/2-q.size*.95,bw,4);ctx.fillStyle=e.color;ctx.fillRect(q.x-bw/2,H/2-q.size*.95,bw*Math.max(0,e.hp/e.maxHp),4);
+      ctx.restore();
+    }
+  }
   function drawPickups(){for(const o of pickups){o.spin+=.03;const q=project({x:o.x,y:o.y,size:.18});if(!q||q.dist>depthBuffer[q.ray]+.1)continue;ctx.save();ctx.translate(q.x,H/2);ctx.rotate(o.spin);ctx.fillStyle=o.type==='heal'?'#5dff9b':'#54d9ff';ctx.shadowBlur=20;ctx.shadowColor=ctx.fillStyle;ctx.fillRect(-q.size/2,-q.size/2,q.size,q.size);ctx.restore()}}
   function shoot(){if(p.shot>0)return;p.shot=p.fireRate;flash=.08;shake=5;let best=null,bestD=999;for(const e of enemies){const dx=e.x-p.x,dy=e.y-p.y,d=Math.hypot(dx,dy);let ang=Math.atan2(dy,dx)-p.a;while(ang>Math.PI)ang-=Math.PI*2;while(ang<-Math.PI)ang+=Math.PI*2;if(Math.abs(ang)<.09&&d<bestD&&hasLOS(p.x,p.y,e.x,e.y)){best=e;bestD=d}}if(best){const dmg=p.damage*(Math.random()<p.crit?2:1);best.hp-=dmg;best.hit=.12;if(p.lifeSteal)p.hp=Math.min(p.maxHp,p.hp+dmg*p.lifeSteal);for(let i=0;i<7;i++)particles.push({x:best.x,y:best.y,vx:rnd(-1,1),vy:rnd(-1,1),life:.4,color:best.color})}for(let i=0;i<5;i++)particles.push({x:p.x+Math.cos(p.a)*.5,y:p.y+Math.sin(p.a)*.5,vx:Math.cos(p.a)*rnd(1,3),vy:Math.sin(p.a)*rnd(1,3),life:.25,color:'#54d9ff'})}
   function hurt(n){if(p.shield>0){p.shield-=n;if(p.shield<0){n=-p.shield;p.shield=0}else n=0}p.hp-=n;shake=8;if(p.hp<=0)die()}
   function move(dt){
-    let ix=0,iy=0;if(keys.KeyW)iy+=1;if(keys.KeyS)iy-=1;if(keys.KeyA)ix-=1;if(keys.KeyD)ix+=1;const len=Math.hypot(ix,iy);if(len){ix/=len;iy/=len}
-    const sprint=keys.Shift&&len&&p.energy>0,sp=p.speed*dt*(sprint?1.8:1);if(sprint)p.energy=Math.max(0,p.energy-35*dt);else p.energy=Math.min(100,p.energy+15*dt);
-    const ca=Math.cos(p.a),sa=Math.sin(p.a),mx=(ix*ca-iy*sa)*sp,my=(ix*sa+iy*ca)*sp;
+    let forward=0,strafe=0;if(keys.KeyW)forward+=1;if(keys.KeyS)forward-=1;if(keys.KeyA)strafe-=1;if(keys.KeyD)strafe+=1;const len=Math.hypot(forward,strafe);if(len){forward/=len;strafe/=len}
+    const sprint=(keys.ShiftLeft||keys.ShiftRight)&&len&&p.energy>0,sp=p.speed*dt*(sprint?1.8:1);if(sprint)p.energy=Math.max(0,p.energy-35*dt);else p.energy=Math.min(100,p.energy+15*dt);
+    const ca=Math.cos(p.a),sa=Math.sin(p.a),mx=(forward*ca-strafe*sa)*sp,my=(forward*sa+strafe*ca)*sp;
     if(!solid(p.x+mx,p.y)&&!solid(p.x+mx+Math.sign(mx)*.12,p.y))p.x+=mx;if(!solid(p.x,p.y+my)&&!solid(p.x,p.y+my+Math.sign(my)*.12))p.y+=my;
     if(mouseX){p.a+=mouseX*.0025;mouseX=0}
   }
