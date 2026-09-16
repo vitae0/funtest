@@ -1,12 +1,43 @@
 <!doctype html>
-<html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>FunTest — Multiplayer Arcade</title><style>
-:root{font-family:Inter,system-ui,sans-serif;color:#f5f7fb;background:#111827}*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at top,#26334d,#111827 60%)}main{max-width:1100px;margin:auto;padding:36px 24px}.hero{display:flex;justify-content:space-between;gap:24px;align-items:end;flex-wrap:wrap}.eyebrow{color:#8ee3b5;text-transform:uppercase;letter-spacing:.15em;font-size:12px;font-weight:800}h1{font-size:clamp(36px,6vw,70px);line-height:.95;margin:12px 0}.sub{color:#b7c1d6;max-width:650px}.panel{margin-top:28px;background:#182235cc;border:1px solid #34415a;border-radius:22px;padding:22px;box-shadow:0 20px 70px #0002}.row{display:flex;gap:12px;flex-wrap:wrap}input,button,select{font:inherit;border-radius:12px;padding:12px 14px;border:1px solid #43516d;background:#101827;color:#fff}button{cursor:pointer;background:#8ee3b5;color:#0d1b18;border:0;font-weight:800}button.secondary{background:#29364e;color:#fff}.games{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-top:20px}.game{padding:18px;border:1px solid #34415a;border-radius:18px;background:#202d43}.game h3{margin:8px 0}.game p{color:#b7c1d6;font-size:14px;min-height:42px}.game button{width:100%}#status{color:#8ee3b5;margin-top:12px;min-height:20px}.hidden{display:none}.arena{margin-top:20px;text-align:center}.target{width:180px;height:180px;border-radius:50%;background:#f97316;border:10px solid #fed7aa;margin:28px auto;display:grid;place-items:center;font-weight:900;font-size:22px;cursor:pointer;user-select:none}.small{color:#9eabc1;font-size:13px}
-</style></head><body><main><section class="hero"><div><div class="eyebrow">FunTest / Desktop Arcade</div><h1>Play. React.<br>Compete.</h1><p class="sub">Hesapsız, oda koduyla çalışan özgün mini oyun koleksiyonu. Aynı bilgisayarda prototip oynanabilir; Supabase bağlantısı sonraki entegrasyon katmanıdır.</p></div><div class="small">5 oyun · 1 oda · 0 hesap</div></section>
-<section class="panel"><h2>Oda</h2><div class="row"><input id="name" placeholder="Oyuncu adı" maxlength="20"><input id="room" placeholder="Oda kodu" maxlength="8"><button id="create">Oda oluştur</button><button class="secondary" id="join">Katıl</button></div><div id="status" aria-live="polite"></div></section>
-<section class="panel"><h2>Mini oyunlar</h2><div class="games" id="games"></div><div id="arena" class="arena hidden"></div></section></main><script>
-const games=[['reaction','Reaction Arena','Hedefe ilk tıklayan puanı alır.'],['color','Color Clash','Doğru rengi seç, hızını koru.'],['memory','Memory Battle','Kart çiftlerini bul.'],['bomb','Bomb Pass','Geri sayım bitmeden bombayı devret.'],['race','Race Clicker','Süre içinde en çok tıklamayı yap.']];
-let player='',room='',active=null,score=0,timer=null;const $=id=>document.getElementById(id);function msg(t){$('status').textContent=t}function render(){ $('games').innerHTML=games.map(g=>`<article class="game"><div class="eyebrow">${g[0]}</div><h3>${g[1]}</h3><p>${g[2]}</p><button data-game="${g[0]}">Oyna</button></article>`).join('');document.querySelectorAll('[data-game]').forEach(b=>b.onclick=()=>start(b.dataset.game))}function ensure(){player=$('name').value.trim()||'Guest';room=$('room').value.trim().toUpperCase()||'LOCAL';msg(`${player} · ${room} odasında hazır.`)}$('create').onclick=()=>{$('room').value=Math.random().toString(36).slice(2,8).toUpperCase();ensure();msg(`Oda oluşturuldu: ${$('room').value}`)};$('join').onclick=ensure;
-function start(type){ensure();active=type;score=0;clearInterval(timer);$('arena').classList.remove('hidden');const title=games.find(g=>g[0]===type)[1];$('arena').innerHTML=`<h2>${title}</h2><div id="gamebody"></div><p class="small">Demo modu · skor: <b id="score">0</b></p>`;const body=$('gamebody');if(type==='reaction')reaction(body);if(type==='color')color(body);if(type==='memory')memory(body);if(type==='bomb')bomb(body);if(type==='race')race(body)}function update(){ $('score').textContent=score }
-function reaction(b){b.innerHTML='<p>Turuncu hedef göründüğünde tıkla.</p><div class="target" id="target">Hazır?</div>';let ready=false;$('target').onclick=()=>{if(!ready){ready=true;$('target').textContent='TIKLA!';$('target').style.background='#22c55e';return}score++;update();$('target').textContent='+'+score;}}function color(b){const colors=['KIRMIZI','MAVİ','YEŞİL','SARI'];b.innerHTML='<p id="prompt"></p><div class="row" id="choices"></div>';function next(){const wanted=colors[Math.floor(Math.random()*4)];$('prompt').textContent='Rengi seç: '+wanted;$('choices').innerHTML=colors.map(c=>`<button class="secondary">${c}</button>`).join('');$('choices').querySelectorAll('button').forEach(x=>x.onclick=()=>{if(x.textContent===wanted)score++;update();next()})}next()}function memory(b){const vals=['🍋','🚀','🌈','🎲','🍋','🚀','🌈','🎲'].sort(()=>Math.random()-.5);b.innerHTML='<div class="games" id="cards"></div>';let first=null,lock=false,found=0;$('cards').innerHTML=vals.map((v,i)=>`<button class="secondary" data-i="${i}" style="height:80px;font-size:28px">?</button>`).join('');$('cards').querySelectorAll('button').forEach((el,i)=>el.onclick=()=>{if(lock||el.textContent!=='?')return;el.textContent=vals[i];if(!first){first={el,i};return}if(vals[i]===vals[first.i]){score++;found++;first=null;update();if(found===4)b.innerHTML+='<p>Tamamlandı!</p>'}else{lock=true;setTimeout(()=>{el.textContent='?';first.el.textContent='?';first=null;lock=false},600)}})}function bomb(b){b.innerHTML='<p>Bombayı devretmek için butona bas.</p><button id="pass">Devret</button><p id="count">10</p>';let n=10;timer=setInterval(()=>{n--; $('count').textContent=n;if(n<=0){clearInterval(timer);$('pass').disabled=true;$('count').textContent='Patladı!'}},1000);$('pass').onclick=()=>{n=10;score++;update()}}function race(b){b.innerHTML='<p>10 saniyede olabildiğince çok tıkla.</p><button id="clicker">TIKLA</button><p id="time">10</p>';let n=10;timer=setInterval(()=>{n--;$('time').textContent=n;if(n<=0){clearInterval(timer);$('clicker').disabled=true}},1000);$('clicker').onclick=()=>{score++;update()}}
-render();
-</script></body></html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Dungeon Ascendant — 3D Roguelike</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main id="shell">
+    <canvas id="game" aria-label="3D dungeon oyunu"></canvas>
+    <div id="hud">
+      <div class="topbar">
+        <div class="brand"><span>DUNGEON</span> ASCENDANT</div>
+        <div class="stat"><b id="level">LV 1</b><span id="xpText">0 / 100 XP</span></div>
+        <div class="stat"><b id="kills">0</b><span>KILLS</span></div>
+        <div class="stat"><b id="floor">1</b><span>FLOOR</span></div>
+      </div>
+      <div class="bars">
+        <div class="bar hp"><i id="hpFill"></i><span>HP <b id="hpText">100 / 100</b></span></div>
+        <div class="bar energy"><i id="energyFill"></i><span>ENERGY <b id="energyText">100</b></span></div>
+        <div class="weapon">VOID CANNON <b id="ammo">∞</b></div>
+      </div>
+      <div id="crosshair"><i></i><i></i><i></i><i></i></div>
+      <div id="message"></div>
+      <div id="minimap"></div>
+    </div>
+    <section id="startScreen" class="overlay">
+      <div class="panel">
+        <p class="eyebrow">ORIGINAL 3D ROGUELIKE</p>
+        <h1>DUNGEON<br><em>ASCENDANT</em></h1>
+        <p class="lead">Hızlı FPS savaşları, prosedürel zindanlar ve her seviyede daha güçlü bir build.</p>
+        <div class="controls"><span><b>W A S D</b> hareket</span><span><b>MOUSE</b> nişan</span><span><b>CLICK</b> ateş</span><span><b>SHIFT</b> dash</span></div>
+        <button id="startBtn">ZİNDANA GİR</button>
+        <p class="hint">İmleci kilitlemek için tıkla · ESC ile serbest bırak</p>
+      </div>
+    </section>
+    <section id="levelUp" class="overlay hidden"><div class="panel compact"><p class="eyebrow">LEVEL UP</p><h2>Gücünü seç</h2><div id="upgrades"></div></div></section>
+    <section id="death" class="overlay hidden"><div class="panel compact"><p class="eyebrow">RUN ENDED</p><h2>Zindan seni yuttu.</h2><p id="deathStats"></p><button id="restartBtn">YENİ RUN</button></div></section>
+  </main>
+  <script src="game.js"></script>
+</body>
+</html>
